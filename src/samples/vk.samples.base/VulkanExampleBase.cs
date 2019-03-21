@@ -13,15 +13,15 @@
 
 using System;
 using System.Diagnostics;
+using System.IO;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using Vulkan;
-using static Vulkan.VulkanNative;
-using System.Numerics;
-using System.IO;
 using Veldrid;
 using Veldrid.Sdl2;
+using Vulkan;
+using static Vulkan.VulkanNative;
 
 namespace Vk.Samples
 {
@@ -83,7 +83,7 @@ namespace Vk.Samples
         protected float zoom;
         protected float zoomSpeed = 50f;
         protected Vector3 rotation;
-        protected float rotationSpeed = 1f;
+        protected float rotationSpeed = 0.01f;
         protected Vector3 cameraPos = new Vector3();
         protected Vector2 mousePos;
 
@@ -267,10 +267,7 @@ namespace Vk.Samples
 
         public IntPtr SetupWin32Window()
         {
-            WindowInstance = Process.GetCurrentProcess().SafeHandle.DangerousGetHandle();
-            NativeWindow = new Sdl2Window(Name, 50, 50, 1280, 720, SDL_WindowFlags.Resizable, threadedProcessing: false);
-            NativeWindow.X = 50;
-            NativeWindow.Y = 50;
+            NativeWindow = new Sdl2Window(Name, 50, 50, 1280, 720, SDL_WindowFlags.Resizable, false);
             NativeWindow.Visible = true;
             NativeWindow.Resized += OnNativeWindowResized;
             NativeWindow.MouseWheel += OnMouseWheel;

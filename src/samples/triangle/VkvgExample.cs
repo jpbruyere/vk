@@ -27,7 +27,7 @@ using static Vulkan.VulkanNative;
 
 namespace Vk.Samples
 {
-    public unsafe class TriangleExample : VulkanExampleBase
+    public unsafe class VkvgExample : VulkanExampleBase
     {
         public VkSemaphore PresentCompleteSemaphore => _presentCompleteSemaphore;
         public VkSemaphore RenderCompleteSemaphore => _renderCompleteSemaphore;
@@ -54,7 +54,7 @@ namespace Vk.Samples
 
         public static void Main()
         {
-            TriangleExample example = new TriangleExample();
+            VkvgExample example = new VkvgExample();
             example.zoom = -2.5f;
             example.InitVulkan();
             example.SetupWin32Window();
@@ -441,84 +441,102 @@ namespace Vk.Samples
         {
             VkCommandBufferBeginInfo cmdBufInfo = VkCommandBufferBeginInfo.New();
 
-            // Set clear values for all framebuffer attachments with loadOp set to clear
-            // We use two attachments (color and depth) that are cleared at the start of the subpass and as such we need to set clear values for both
-            byte* clearValuesData = stackalloc byte[2 * sizeof(VkClearValue)];
-            VkClearValue* clearValues = (VkClearValue*)clearValuesData;
-            clearValues[0].color = new VkClearColorValue(0.0f, 0.0f, 0.2f);
-            clearValues[1].depthStencil = new VkClearDepthStencilValue() { depth = 1.0f, stencil = 0 };
-
-            VkRenderPassBeginInfo renderPassBeginInfo = VkRenderPassBeginInfo.New();
-            renderPassBeginInfo.renderPass = renderPass;
-            renderPassBeginInfo.renderArea.offset.x = 0;
-            renderPassBeginInfo.renderArea.offset.y = 0;
-            renderPassBeginInfo.renderArea.extent.width = width;
-            renderPassBeginInfo.renderArea.extent.height = height;
-            renderPassBeginInfo.clearValueCount = 2;
-            renderPassBeginInfo.pClearValues = clearValues;
+            VkImage srcImg = new VkImage ((ulong)vkvgSurf.VkImage.ToInt64());
 
             for (int i = 0; i < drawCmdBuffers.Count; ++i)
             {
-                // Set target frame buffer
-                renderPassBeginInfo.framebuffer = frameBuffers[i];
 
                 Util.CheckResult(vkBeginCommandBuffer(drawCmdBuffers[i], ref cmdBufInfo));
 
-                // Start the first sub pass specified in our default render pass setup by the base class
-                // This will clear the color and depth attachment
-                vkCmdBeginRenderPass(drawCmdBuffers[i], ref renderPassBeginInfo, VkSubpassContents.Inline);
+                Tools.setImageLayout (drawCmdBuffers[i], Swapchain.Buffers[i].Image, VkImageAspectFlags.Color,
+                    VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal,
+                    VkPipelineStageFlags.BottomOfPipe,VkPipelineStageFlags.Transfer);
+                Tools.setImageLayout (drawCmdBuffers[i], srcImg, VkImageAspectFlags.Color,
+                    VkImageLayout.ColorAttachmentOptimal, VkImageLayout.TransferSrcOptimal,
+                    VkPipelineStageFlags.ColorAttachmentOutput, VkPipelineStageFlags.Transfer);
 
-                // Update dynamic viewport state
-                VkViewport viewport = new VkViewport();
-                viewport.height = (float)height;
-                viewport.width = (float)width;
-                viewport.minDepth = (float)0.0f;
-                viewport.maxDepth = (float)1.0f;
-                vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+                VkImageSubresourceLayers imgSubResLayer = new VkImageSubresourceLayers
+                {
+                    aspectMask = VkImageAspectFlags.Color,
+                    mipLevel = 0,
+                    baseArrayLayer = 0,
+                    layerCount = 1
+                };
+                VkImageCopy cregion = new VkImageCopy
+                {
+                    srcSubresource = imgSubResLayer,
+                    srcOffset = default(VkOffset3D),
+                    dstSubresource = imgSubResLayer,
+                    dstOffset = default(VkOffset3D),
+                    extent = new VkExtent3D {width = 512, height = 512}
+                };
+                vkCmdCopyImage (drawCmdBuffers[i], srcImg, VkImageLayout.TransferSrcOptimal,
+                    Swapchain.Buffers[i].Image, VkImageLayout.TransferDstOptimal, 1, &cregion);
 
-                // Update dynamic scissor state
-                VkRect2D scissor = new VkRect2D();
-                scissor.extent.width = width;
-                scissor.extent.height = height;
-                scissor.offset.x = 0;
-                scissor.offset.y = 0;
-                vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
-
-                // Bind descriptor sets describing shader binding points
-                var ds = DescriptorSet;
-                vkCmdBindDescriptorSets(drawCmdBuffers[i], VkPipelineBindPoint.Graphics, PipelineLayout, 0, 1, ref ds, 0, null);
-
-                // Bind the rendering Pipeline
-                // The Pipeline (state object) contains all states of the rendering Pipeline, binding it will set all the states specified at Pipeline creation time
-                vkCmdBindPipeline(drawCmdBuffers[i], VkPipelineBindPoint.Graphics, Pipeline);
-
-                // Bind triangle vertex buffer (contains position and colors)
-                ulong offsets = 0;
-                vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, ref _Vertices.buffer, ref offsets);
-
-                // Bind triangle index buffer
-                vkCmdBindIndexBuffer(drawCmdBuffers[i], _Indices.buffer, 0, VkIndexType.Uint32);
-
-                // Draw indexed triangle
-                vkCmdDrawIndexed(drawCmdBuffers[i], _Indices.count, 1, 0, 0, 1);
-
-                vkCmdEndRenderPass(drawCmdBuffers[i]);
-
-                // Ending the render pass will add an implicit barrier transitioning the frame buffer color attachment to 
-                // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR for presenting it to the windowing system
+                Tools.setImageLayout (drawCmdBuffers[i], Swapchain.Buffers[i].Image, VkImageAspectFlags.Color,
+                    VkImageLayout.TransferDstOptimal, VkImageLayout.PresentSrcKHR,
+                    VkPipelineStageFlags.Transfer, VkPipelineStageFlags.BottomOfPipe);
+                Tools.setImageLayout (drawCmdBuffers[i], srcImg, VkImageAspectFlags.Color,
+                    VkImageLayout.TransferSrcOptimal, VkImageLayout.ColorAttachmentOptimal,
+                    VkPipelineStageFlags.Transfer, VkPipelineStageFlags.ColorAttachmentOutput);
 
                 Util.CheckResult(vkEndCommandBuffer(drawCmdBuffers[i]));
             }
         }
-
+        uint a = 0;
         void Draw()
         {
+            if (a > 500)
+                a = 0;
+            else
+                a++;
+
             // Get next image in the swap chain (back/front buffer)
             Util.CheckResult(Swapchain.AcquireNextImage(PresentCompleteSemaphore, ref currentBuffer));
 
             // Use a fence to wait until the command buffer has finished execution before using it again
             Util.CheckResult(vkWaitForFences(device, 1, ref waitFences[currentBuffer], True, ulong.MaxValue));
             Util.CheckResult(vkResetFences(device, 1, ref waitFences[currentBuffer]));
+
+
+            using (vkvg.Context ctx = new vkvg.Context (vkvgSurf))
+            {
+                ctx.SetSource (0.4, 0.4, 0.4);
+                ctx.Paint ();
+                ctx.Rotate (rotation.X);
+                /*ctx.LineWidth = 4;
+                ctx.MoveTo (10, a);
+                ctx.LineTo (200, a);
+                ctx.SetSource (0, 0, 1);
+                ctx.Stroke ();
+                ctx.MoveTo (200, 200);
+                ctx.FontSize = 20;
+                ctx.FontFace = "droid";
+                ctx.ShowText (this.frameTimer.ToString());
+                ctx.ShowText ("This is a test string");*/
+
+                float xc = 128.0f;
+                float yc = 128.0f;
+                float radius = 100.0f;
+                float angle1 = 45.0f * (MathF.PI / 180.0f);  /* angles are specified */
+                float angle2 = 180.0f * (MathF.PI / 180.0f);  /* in radians           */
+
+                ctx.SetSource (0, 0, 0);
+                ctx.LineWidth = 10;
+                ctx.Arc (xc, yc, radius, angle1, angle2);
+                ctx.Stroke ();
+
+                /* draw helping lines */
+                ctx.SetSource (1, 0.2, 0.2, 0.6);
+                ctx.LineWidth = 6;
+                ctx.Arc (xc, yc, 10, 0, 2f * Math.PI);
+                ctx.Fill ();
+
+                ctx.Arc (xc, yc, radius, angle1, angle1);
+                ctx.LineTo (xc, yc);
+                ctx.Arc (xc, yc, radius, angle2, angle2);
+                ctx.Stroke ();
+            }
 
             Util.CheckResult (queue.submit(drawCmdBuffers[currentBuffer],PresentCompleteSemaphore,RenderCompleteSemaphore , waitFences[currentBuffer]));
             // Present the current buffer to the swap chain
@@ -559,11 +577,12 @@ namespace Vk.Samples
             // So every shader binding should map to one descriptor set layout binding
 
             // Binding 0: Uniform buffer (Vertex shader)
-            VkDescriptorSetLayoutBinding layoutBinding = new VkDescriptorSetLayoutBinding();
-            layoutBinding.descriptorType = VkDescriptorType.UniformBuffer;
-            layoutBinding.descriptorCount = 1;
-            layoutBinding.stageFlags = VkShaderStageFlags.Vertex;
-            layoutBinding.pImmutableSamplers = null;
+            VkDescriptorSetLayoutBinding layoutBinding = new VkDescriptorSetLayoutBinding
+            {
+                descriptorType = VkDescriptorType.UniformBuffer,
+                descriptorCount = 1,
+                stageFlags = VkShaderStageFlags.Vertex,
+            };
 
             VkDescriptorSetLayoutCreateInfo descriptorLayout = VkDescriptorSetLayoutCreateInfo.New();
             descriptorLayout.bindingCount = 1;
@@ -974,71 +993,7 @@ namespace Vk.Samples
         }
     }
 
-    public struct Vertex
-    {
-        public Vector3 Position;
-        public Vector3 Color;
-    }
 
-    struct StagingBuffer
-    {
-        public VkDeviceMemory memory;
-        public VkBuffer buffer;
-    };
 
-    struct StagingBuffers
-    {
 
-        public StagingBuffer vertices;
-        public StagingBuffer indices;
-    }
-
-    // Vertex buffer and attributes
-    public struct Vertices
-    {
-
-        public VkDeviceMemory memory;      // Handle to the Device memory for this buffer
-        public VkBuffer buffer;            // Handle to the Vulkan buffer object that the memory is bound to
-    }
-
-    // Index buffer
-    public struct Indices
-    {
-        public VkDeviceMemory memory;
-        public VkBuffer buffer;
-        public uint count;
-    }
-
-    // Uniform buffer block object
-    public struct UniformBufferVS
-    {
-        public VkDeviceMemory memory;
-        public VkBuffer buffer;
-        public VkDescriptorBufferInfo descriptor;
-    }
-
-    // For simplicity we use the same uniform block layout as in the shader:
-    //
-    //	layout(set = 0, binding = 0) uniform UBO
-    //	{
-    //		mat4 projectionMatrix;
-    //		mat4 modelMatrix;
-    //		mat4 viewMatrix;
-    //	} ubo;
-    //
-    // This way we can just memcopy the ubo data to the ubo
-    // Note: You should use data types that align with the GPU in order to avoid manual padding (vec4, mat4)
-    public struct UboVS
-    {
-        public Matrix4x4 projectionMatrix;
-        public Matrix4x4 modelMatrix;
-        public Matrix4x4 viewMatrix;
-    }
-
-    public struct TriangleIndices
-    {
-        public int Index0;
-        public int Index1;
-        public int Index2;
-    }
 }

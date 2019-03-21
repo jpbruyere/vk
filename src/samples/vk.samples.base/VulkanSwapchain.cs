@@ -49,6 +49,7 @@ namespace Vk.Samples
             SDL_SysWMinfo sysWmInfo;
             sysWmInfo.version = version;
             int result = SDL_GetWMWindowInfo(sdlWindow, &sysWmInfo);
+
             if (result == 0)
             {
                 throw new InvalidOperationException("Couldn't retrieve SDL window info.");
@@ -99,6 +100,7 @@ namespace Vk.Samples
                 for (uint i = 0; i < queueCount; i++)
                 {
                     vkGetPhysicalDeviceSurfaceSupportKHR(PhysicalDevice, i, Surface, &supportsPresent[i]);
+                    Console.WriteLine ("supports: " + supportsPresent[i].ToString ());
                 }
 
                 // Search for a graphics and a present queue in the array of queue

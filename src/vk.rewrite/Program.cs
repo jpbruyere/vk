@@ -92,7 +92,6 @@ namespace Vk.Rewrite
         {
             if (method.CustomAttributes.Any(ca => ca.AttributeType == s_calliRewriteRef))
             {
-                var processor = method.Body.GetILProcessor();
                 RewriteMethod(method);
                 method.CustomAttributes.Remove(method.CustomAttributes.Single(ca => ca.AttributeType == s_calliRewriteRef));
             }
